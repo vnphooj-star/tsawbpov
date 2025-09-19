@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="lo">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Memory Match — ເກມ Hmongdub</title>
+  <style>
+    :root{--bg:#071125;--card:#0b1220;--accent:#10b981;--muted:#94a3b8}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:linear-gradient(180deg,#041024,#071125);color:#e6eef6}
+    .wrap{width:920px;max-width:100%;display:grid;grid-template-columns:1fr 320px;gap:18px}
+    .board{background:rgba(255,255,255,0.02);padding:18px;border-radius:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    .tile{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:10px;padding:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-size:32px;height:84px}
+    .tile.flipped{background:linear-gradient(180deg,rgba(255,255,255,0.06),transparent);}
+    .card{background:rgba(255,255,255,0.02);padding:16px;border-radius:12px}
+    h1{font-size:18px;margin:0 0 6px}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;color:inherit;cursor:pointer}
+    .primary{background:var(--accent);color:#062024;border:none}
+    .muted{color:var(--muted);font-size:13px}
+    .stats{display:flex;flex-direction:column;gap:8px}
+    .big{font-size:28px;font-weight:700}
+    .footer{margin-top:12px;color:var(--muted);font-size:13px}
+    @media (max-width:900px){.wrap{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Memory Match — ເກມ Hmoob dub</h1>
+      <div class="muted">ກົດແຜ່ນ 2 ອັນເພື່ອຊົມເຂົ້າ ແລ້ວພະຍາຍາມພໍ່ກັນ.</div>
+      <div style="margin-top:12px" class="controls">
+        <button id="new" class="primary">ເລີ່ມໃໝ່</button>
+        <button id="shuffle">Shuffle</button>
+        <select id="size">
+          <option value="4">4x4 (ເລື່ອນ)</option>
+          <option value="6">6x6 (Hard)</option>
+        </select>
+      </div>
+
+      <div style="margin-top:12px" class="stats">
+        <div>Moves <div id="moves" class="big">0</div></div>
+        <div>Matched <div id="matched" class="big">0</div></div>
+        <div>Time <div id="timer" class="big">0:00</div></div>
+      </div>
+
+      <div class="footer">ເລືອກ grid ແລ້ວ press "ເລີ່ມໃໝ່". ຕ້ອງການຟີເຈີອື່ນໆ? ບອກຂ້ອຍ!</div>
+    </div>
+
+    <div id="game-area" class="board card"></div>
+  </div>
+
+<script>
+const gameArea = document.getElementById('game-area');
+const newBtn = document.getElementById('new');
+const shuffleBtn = document.getElementById('shuffle');
+const sizeSelect = document.getElementById('size');
+const movesEl = document.getElementById('moves');
+const matchedEl = document.getElementById('matched');
+const timerEl = document.getElementById('timer');
+
+let icons = ['🍎','🍌','🍇','🍓','🍒','🍑','🍍','🥝','🍉','🥥','🍋','🥭','🍐','🫐','🍊','🍈','🍏','🍅']
+let board = [];
+let first = null; let second = null;
+let lock = false;
+let moves = 0; let matched = 0;
+let totalPairs = 8; // default for 4x4
+let timer = 0; let timerId = null;
+
+function formatTime(s){const m=Math.floor(s/60);const sec=s%60;return `${m}:${sec.toString().padStart(2,'0')}`}
+
+function startTimer(){clearInterval(timerId);timer=0;timerEl.textContent=formatTime(timer);timerId=setInterval(()=>{timer++;timerEl.textContent=formatTime(timer)},1000)}
+function stopTimer(){clearInterval(timerId);timerId=null}
+
+function shuffleArray(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function buildBoard(){gameArea.innerHTML='';board=[];first=null;second=null;lock=false;moves=0;matched=0;movesEl.textContent=0;matchedEl.textContent=0;stopTimer();
+  const size = Number(sizeSelect.value);
+  const cells = size*size;
+  totalPairs = cells/2;
+  // prepare icons
+  const selected = icons.slice(0,totalPairs);
+  const pairs = shuffleArray([...selected,...selected]);
+  board = pairs.map((icon,idx)=>({icon,idx,flipped:false,matched:false}));
+  board.forEach(card=>{
+    const div = document.createElement('div');
+    div.className='tile';
+    div.dataset.idx = card.idx;
+    div.innerHTML = '<span class="face">' + '' + '</span>';
+    div.addEventListener('click', ()=>onClick(card,div));
+    // attach dom ref
+    card.dom = div;
+    gameArea.appendChild(div);
+  });
+  // adjust grid columns for 6x6
+  gameArea.style.gridTemplateColumns = `repeat(${size},1fr)`;
+}
+
+function reveal(card,div){div.classList.add('flipped');div.textContent = card.icon}
+function hide(card,div){div.classList.remove('flipped');div.textContent = ''}
+
+function onClick(card,div){
+  if(lock || card.matched || card===first) return;
+  if(!timerId) startTimer();
+  reveal(card,div);
+  if(!first){first=card;return}
+  second=card;lock=true;moves++;movesEl.textContent=moves;
+  if(first.icon===second.icon){
+    // match
+    first.matched=true; second.matched=true; matched+=1; matchedEl.textContent=matched;
+    setTimeout(()=>{first.dom.classList.add('matched');second.dom.classList.add('matched'); resetTurn(); if(matched===totalPairs){win()}},300);
+  } else {
+    setTimeout(()=>{hide(first,first.dom);hide(second,second.dom);resetTurn()},700);
+  }
+}
+
+function resetTurn(){first=null;second=null;lock=false}
+
+function win(){stopTimer();setTimeout(()=>{alert(`ຍິນດີ! ແກ້ໄຂແລ້ວໃນ ${moves} moves ແລະ ${formatTime(timer)}`)},200)}
+
+newBtn.addEventListener('click', buildBoard);
+shuffleBtn.addEventListener('click', ()=>{buildBoard()});
+sizeSelect.addEventListener('change', buildBoard);
+
+// initial
+buildBoard();
+</script>
+</body>
+</html>
